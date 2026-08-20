@@ -22,7 +22,14 @@ module Graphql
 
       def schema_class
         @schema_class ||= begin
-          schema_param = request.query_parameters["schema"] || params[:schema]
+          # Only schemas configured at mount time (`mount GraphQL::Dashboard, schema: ...`)
+          # may be used here. A `?schema=...` param can select one of them, but it never
+          # provides the value which is resolved to a constant.
+          configured_schemas = Array(request.path_parameters[:schema] || request.path_parameters["schema"])
+          schema_param = request.query_parameters["schema"]
+          schema_param = configured_schemas.find { |schema| schema.to_s == schema_param } if schema_param
+          schema_param ||= configured_schemas.first
+
           case schema_param
           when Class
             schema_param
