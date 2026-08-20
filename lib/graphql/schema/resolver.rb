@@ -83,7 +83,9 @@ module GraphQL
             is_authed, new_return_value = authorized?(**@prepared_arguments)
           rescue GraphQL::UnauthorizedError  => err
             new_return_value = q.schema.unauthorized_object(err)
-            is_authed = true # the error was handled
+            # Access was denied: don't call `resolve`, use the value from the
+            # unauthorized hook instead (`nil` by default).
+            is_authed = false
           end
         end
 
