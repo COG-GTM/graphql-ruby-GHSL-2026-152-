@@ -383,4 +383,65 @@ describe "Next Execution" do
     }
     assert_graphql_equal expected_result, result
   end
+
+  describe "resolvers whose authorized? raises GraphQL::UnauthorizedError" do
+    class UnauthorizedResolverSchema < GraphQL::Schema
+      RESOLVED = []
+
+      class SecretResolver < GraphQL::Schema::Resolver
+        type String, null: true
+
+        def authorized?(**args)
+          raise GraphQL::UnauthorizedError.new(unauthorized_message, context: context)
+        end
+
+        def unauthorized_message
+          "Nope"
+        end
+
+        def resolve
+          RESOLVED << self.class.name
+          "top-secret"
+        end
+      end
+
+      class ReplacedSecretResolver < SecretResolver
+        def unauthorized_message
+          "Nope, but here's something else"
+        end
+      end
+
+      class Query < GraphQL::Schema::Object
+        field :secret, resolver: SecretResolver
+        field :replaced_secret, resolver: ReplacedSecretResolver
+      end
+
+      query(Query)
+      use GraphQL::Execution::Next
+
+      def self.unauthorized_object(err)
+        if err.message == "Nope, but here's something else"
+          "<replacement>"
+        else
+          super
+        end
+      end
+    end
+
+    before do
+      UnauthorizedResolverSchema::RESOLVED.clear
+    end
+
+    it "doesn't call resolve and returns the unauthorized value" do
+      result = UnauthorizedResolverSchema.execute_next("{ secret }")
+      assert_nil result["data"]["secret"]
+      assert_equal [], UnauthorizedResolverSchema::RESOLVED
+    end
+
+    it "uses the value returned by unauthorized_object when there is one" do
+      result = UnauthorizedResolverSchema.execute_next("{ replacedSecret }")
+      assert_equal "<replacement>", result["data"]["replacedSecret"]
+      assert_equal [], UnauthorizedResolverSchema::RESOLVED
+    end
+  end
 end
