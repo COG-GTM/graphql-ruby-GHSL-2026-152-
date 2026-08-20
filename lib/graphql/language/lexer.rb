@@ -148,7 +148,14 @@ module GraphQL
         "\\t" => "\t",
       }
       UTF_8 = /\\u(?:([\dAa-f]{4})|\{([\da-f]{4,})\})(?:\\u([\dAa-f]{4}))?/i
-      VALID_STRING = /\A(?:[^\\]|#{ESCAPES}|#{UTF_8})*\z/o
+      # Matches exactly one unicode escape. Unlike `UTF_8`, it never consumes a
+      # second, optional escape: an ambiguous alternation like that one, nested in
+      # the repetition below, gives a run of escapes exponentially many parses,
+      # so a string that ultimately fails to match can pin a CPU (ReDoS).
+      SINGLE_UTF_8 = /\\u(?:[\dA-Fa-f]{4}|\{[\dA-Fa-f]{4,}\})/
+      # Each alternative starts with a distinct character, so the repetition is
+      # unambiguous; the possessive `*+` keeps failures from backtracking at all.
+      VALID_STRING = /\A(?:[^\\]|#{ESCAPES}|#{SINGLE_UTF_8})*+\z/o
       ESCAPED = /(?:#{ESCAPES}|#{UTF_8})/o
 
       def string_value
