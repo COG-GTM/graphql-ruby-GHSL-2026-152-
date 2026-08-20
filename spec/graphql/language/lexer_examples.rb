@@ -138,6 +138,17 @@ GRAPHQL
           assert_bad_unicode('"\\u0XXF \\u0009"', "Bad unicode escape in \"\\\\u0XXF \\\\u0009\"")
         end
 
+        it "rejects a long run of unicode escapes without catastrophic backtracking" do
+          # This token lexes, then fails string validation on its last escape.
+          # If the validation pattern can parse the run of escapes in more than
+          # one way, reaching that conclusion takes exponential time.
+          escapes = ('\u1234' * 60) + '\u123z'
+          started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          assert_bad_unicode("\"#{escapes}\"", "Bad unicode escape in #{escapes.inspect}")
+          elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
+          assert elapsed < 5, "expected the bad escape to be rejected promptly, took #{elapsed}s"
+        end
+
         it "rejects truly invalid UTF-8 bytes" do
           error_filename = "spec/support/parser/filename_example_invalid_utf8.graphql"
           text = File.read(error_filename)
