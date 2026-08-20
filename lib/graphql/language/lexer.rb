@@ -293,14 +293,21 @@ module GraphQL
       ESCAPED_QUOTE = /\\"/;
       STRING_CHAR = /#{ESCAPED_QUOTE}|[^"\\\n\r]|#{UNICODE_ESCAPE}|#{STRING_ESCAPE}/
       QUOTED_STRING_REGEXP = %r{#{QUOTE} (?:#{STRING_CHAR})* #{QUOTE}}x
+      # The body of a block string is scanned in one greedy, atomic pass: each
+      # alternative consumes a fixed number of characters, and the atomic group
+      # keeps the engine from re-partitioning what it has already consumed.
+      # Without that, alternatives which can match the same characters (for
+      # example, two of them matching a lone backslash) let a run of
+      # backslashes with no closing `"""` be split exponentially many ways
+      # before the match can fail.
       BLOCK_STRING_REGEXP = %r{
         #{BLOCK_QUOTE}
-        (?: [^"\\]               |  # Any characters that aren't a quote or slash
-           (?<!") ["]{1,2} (?!") |  # Any quotes that don't have quotes next to them
-           \\"{0,3}(?!")         |  # A slash followed by <= 3 quotes that aren't followed by a quote
-           \\                    |  # A slash
-           "{1,2}(?!")              # 1 or 2 " followed by something that isn't a quote
-        )*
+        (?>(?:
+           [^"\\]              |  # Any character that isn't a quote or a slash
+           \\#{BLOCK_QUOTE}    |  # An escaped block quote
+           \\.                 |  # A slash and the character it escapes
+           "(?!"")                # A quote that doesn't begin the closing block quote
+        )*)
         (?:"")?
         #{BLOCK_QUOTE}
       }xm
